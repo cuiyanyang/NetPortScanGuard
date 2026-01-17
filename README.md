@@ -2,4 +2,4 @@
 pip install -r requirements.txt
 
 # 运行文件 
-ptyhon .\main
+python .\main.py
