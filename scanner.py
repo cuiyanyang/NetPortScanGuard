@@ -46,8 +46,7 @@ class Scanner:
         alive_hosts = []
         total = len(hosts_to_scan)
         
-        # 线程池调度：max_workers=50 兼顾探测效率与系统负载
-        with ThreadPoolExecutor(max_workers=50) as executor:
+        with ThreadPoolExecutor(max_workers=15) as executor:
             future_to_ip = {executor.submit(self._arp_single_host, ip): ip for ip in hosts_to_scan}
             for i, future in enumerate(as_completed(future_to_ip), 1):
                 result = future.result()

@@ -11,7 +11,7 @@ class NetPortScanGuardGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("NetPortScanGuard")
-        self.root.geometry("600x520")
+        self.root.geometry("750x650")
         
         # 界面 UI 样式配置
         self.bg_color = "#f5f6f7"
@@ -50,7 +50,7 @@ class NetPortScanGuardGUI:
         label.pack(pady=pady)
         return label
 
-    def create_button(self, text, command, width=30, pady=8):
+    def create_button(self, text, command, width=40, pady=12):
         """封装风格统一的扁平化按钮"""
         btn = tk.Button(self.content_frame, text=text, width=width, command=command,
                         bg=self.btn_color, fg="white", font=("Microsoft YaHei", 10, "bold"),
@@ -62,7 +62,7 @@ class NetPortScanGuardGUI:
     # --- 1. 入口主菜单 ---
     def main_menu(self):
         self.clear_widgets()
-        self.create_label("=== NetPortScanGuard 系统主界面 ===", 16, pady=30)
+        self.create_label("=== NetPortScanGuard 系统主界面 ===", 16, pady=40)
         self.create_button("探测存活主机", self.scan_hosts)
         self.create_button("扫描检测监控", self.start_detection)
         self.create_button("查看分析日志", self.view_logs)
@@ -116,7 +116,7 @@ class NetPortScanGuardGUI:
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
         
-        listbox = tk.Listbox(list_frame, width=60, height=10, font=("Consolas", 10),
+        listbox = tk.Listbox(list_frame, width=70, height=12, font=("Consolas", 10),
                              yscrollcommand=scrollbar.set, borderwidth=1, relief="solid")
         for idx, (ip, mac) in enumerate(alive_hosts, 1):
             listbox.insert(tk.END, f" {idx:02d}. IP: {ip.ljust(15)}  MAC: {mac}")
@@ -140,21 +140,54 @@ class NetPortScanGuardGUI:
 
         # 扫描技术选项映射
         mode = tk.StringVar(value="1")
-        modes = {"1": "TCP Connect", "2": "TCP SYN", "3": "TCP SYN|ACK", "4": "TCP FIN", 
-                 "5": "UDP 扫描", "6": "NULL 扫描", "7": "Xmas 扫描"}
-
+        
         mode_frame = tk.Frame(self.content_frame, bg=self.bg_color)
         mode_frame.pack(pady=10)
-        for val, name in modes.items():
-            tk.Radiobutton(mode_frame, text=name, variable=mode, value=val, 
-                          bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w")
+        
+        # 创建2x2网格布局
+        grid_frame = tk.Frame(mode_frame, bg=self.bg_color)
+        grid_frame.pack()
+        
+        # 第一行第一个：TCP 基础扫描
+        frame1 = tk.Frame(grid_frame, bg=self.bg_color, padx=20, pady=10)
+        frame1.grid(row=0, column=0, sticky="nw")
+        tk.Label(frame1, text="● TCP 基础扫描", font=("Microsoft YaHei", 10, "bold"), bg=self.bg_color).pack(anchor="w", pady=(0, 5))
+        tk.Radiobutton(frame1, text="TCP 全连接扫描", variable=mode, value="1", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
+        
+        # 第一行第二个：TCP 标志位扫描
+        frame2 = tk.Frame(grid_frame, bg=self.bg_color, padx=20, pady=10)
+        frame2.grid(row=0, column=1, sticky="nw")
+        tk.Label(frame2, text="● TCP 标志位扫描", font=("Microsoft YaHei", 10, "bold"), bg=self.bg_color).pack(anchor="w", pady=(0, 5))
+        tk.Radiobutton(frame2, text="TCP SYN 扫描", variable=mode, value="2", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
+        tk.Radiobutton(frame2, text="TCP SYN|ACK 扫描", variable=mode, value="3", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
+        
+        # 第二行第一个：TCP 隐蔽扫描
+        frame3 = tk.Frame(grid_frame, bg=self.bg_color, padx=20, pady=10)
+        frame3.grid(row=1, column=0, sticky="nw")
+        tk.Label(frame3, text="● TCP 隐蔽扫描", font=("Microsoft YaHei", 10, "bold"), bg=self.bg_color).pack(anchor="w", pady=(0, 5))
+        tk.Radiobutton(frame3, text="TCP FIN 扫描", variable=mode, value="4", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
+        tk.Radiobutton(frame3, text="NULL 扫描", variable=mode, value="6", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
+        tk.Radiobutton(frame3, text="Xmas 扫描", variable=mode, value="7", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
+        
+        # 第二行第二个：UDP 扫描
+        frame4 = tk.Frame(grid_frame, bg=self.bg_color, padx=20, pady=10)
+        frame4.grid(row=1, column=1, sticky="nw")
+        tk.Label(frame4, text="● UDP 扫描", font=("Microsoft YaHei", 10, "bold"), bg=self.bg_color).pack(anchor="w", pady=(0, 5))
+        tk.Radiobutton(frame4, text="UDP 扫描", variable=mode, value="5", 
+                      bg=self.bg_color, font=("Microsoft YaHei", 9)).pack(anchor="w", padx=10)
 
-        self.status_label = tk.Label(self.content_frame, text="准备就绪", bg=self.bg_color)
-        self.status_label.pack()
+        self.status_label = tk.Label(self.content_frame, text="准备就绪", bg=self.bg_color, font=("Microsoft YaHei", 10))
+        self.status_label.pack(pady=8)
 
         progress = tk.DoubleVar()
-        progressbar = ttk.Progressbar(self.content_frame, variable=progress, maximum=100, length=400)
-        progressbar.pack(pady=10)
+        progressbar = ttk.Progressbar(self.content_frame, variable=progress, maximum=100, length=500)
+        progressbar.pack(pady=15)
 
         def run_scan():
             ports = list(range(20, 1025)) # 扫描范围：常用端口
@@ -187,10 +220,10 @@ class NetPortScanGuardGUI:
             self.scanning = False
             result_str = "\n".join([f"{p}: {s}" for p, s in open_results]) if open_results else "未发现开放端口"
             messagebox.showinfo("扫描完成", f"结果如下：\n{result_str}")
-            self.root.after(0, self.close_log_and_return)
-
+            self.root.after(0, lambda: self.status_label.config(text="扫描完成"))
         self.create_button("开始探测", lambda: threading.Thread(target=run_scan, daemon=True).start())
-        self.create_button("取消并返回", self.close_log_and_return)
+        self.create_button("取消", lambda: setattr(self, "scanning", False))
+        self.create_button("返回主菜单", self.close_log_and_return)
 
     # --- 5. 入侵检测/抓包监控 ---
     def start_detection(self):
@@ -223,10 +256,10 @@ class NetPortScanGuardGUI:
         self.clear_widgets()
         log_dir = "log"
         if not os.path.exists(log_dir): os.makedirs(log_dir)
-        # 获取最近 10 条日志，逆序排列（最新在前）
-        files = sorted([f for f in os.listdir(log_dir) if f.endswith(".log")], reverse=True)[:10]
+        # 获取所有日志，逆序排列（最新在前）
+        files = sorted([f for f in os.listdir(log_dir) if f.endswith(".log")], reverse=True)
 
-        self.create_label("最近 10 条安全日志", 12)
+        self.create_label("所有安全日志", 12)
         listbox = tk.Listbox(self.content_frame, width=60, height=10)
         for f in files: listbox.insert(tk.END, f)
         listbox.pack(pady=10)
@@ -238,9 +271,10 @@ class NetPortScanGuardGUI:
                     content = f.read()
                 log_win = tk.Toplevel(self.root) # 弹出独立窗口显示日志
                 log_win.title("日志详情")
-                t = tk.Text(log_win, width=80, height=20)
+                log_win.geometry("800x600") # 设置初始窗口大小
+                t = tk.Text(log_win)
                 t.insert(tk.END, content)
-                t.pack()
+                t.pack(fill=tk.BOTH, expand=True) # 使文本框随窗口大小调整
 
         self.create_button("阅读选中的日志", read_log)
         self.create_button("返回主菜单", self.main_menu)
