@@ -63,10 +63,10 @@ class NetPortScanGuardGUI:
     def main_menu(self):
         self.clear_widgets()
         self.create_label("=== NetPortScanGuard 系统主界面 ===", 16, pady=40)
-        self.create_button("探测存活主机", self.scan_hosts)
-        self.create_button("扫描检测监控", self.start_detection)
-        self.create_button("查看分析日志", self.view_logs)
-        self.create_button("退出安全系统", self.root.quit)
+        self.create_button("端口扫描", self.scan_hosts)
+        self.create_button("扫描检测", self.start_detection)
+        self.create_button("查看日志", self.view_logs)
+        self.create_button("退出系统", self.root.quit)
 
     # --- 2. 存活主机扫描模块 ---
     def scan_hosts(self):
@@ -254,30 +254,162 @@ class NetPortScanGuardGUI:
     # --- 6. 历史记录查询 ---
     def view_logs(self):
         self.clear_widgets()
-        log_dir = "log"
-        if not os.path.exists(log_dir): os.makedirs(log_dir)
-        # 获取所有日志，逆序排列（最新在前）
-        files = sorted([f for f in os.listdir(log_dir) if f.endswith(".log")], reverse=True)
-
         self.create_label("所有安全日志", 12)
-        listbox = tk.Listbox(self.content_frame, width=60, height=10)
-        for f in files: listbox.insert(tk.END, f)
-        listbox.pack(pady=10)
-
-        def read_log():
-            selection = listbox.curselection()
-            if selection:
-                with open(os.path.join(log_dir, files[selection[0]]), "r", encoding="utf-8") as f:
-                    content = f.read()
-                log_win = tk.Toplevel(self.root) # 弹出独立窗口显示日志
-                log_win.title("日志详情")
-                log_win.geometry("800x600") # 设置初始窗口大小
-                t = tk.Text(log_win)
-                t.insert(tk.END, content)
-                t.pack(fill=tk.BOTH, expand=True) # 使文本框随窗口大小调整
-
-        self.create_button("阅读选中的日志", read_log)
-        self.create_button("返回主菜单", self.main_menu)
+        
+        # 从MySQL数据库读取所有表
+        try:
+            import pymysql
+            
+            # 连接MySQL数据库
+            connection = pymysql.connect(
+                host='localhost',
+                user='root',
+                password='mysql',
+                database='port_log_db',
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # 获取所有扫描和检测相关的表
+            with connection.cursor() as cursor:
+                # 分别查询两种类型的表并合并结果
+                cursor.execute("SHOW TABLES LIKE '%-scan'")
+                scan_tables = cursor.fetchall()
+                cursor.execute("SHOW TABLES LIKE '%-detect'")
+                detect_tables = cursor.fetchall()
+                tables = scan_tables + detect_tables
+            
+            # 提取表名并按时间倒序排序
+            table_names = []
+            for table in tables:
+                # 不同MySQL版本返回格式可能不同
+                if 'Tables_in_port_log_db' in table:
+                    table_names.append(table['Tables_in_port_log_db'])
+                else:
+                    for key, value in table.items():
+                        table_names.append(value)
+            
+            # 按表名排序（时间戳顺序）
+            table_names.sort(reverse=True)
+            
+            connection.close()
+            
+            if not table_names:
+                self.create_label("暂无日志记录", 12, color="red")
+                self.create_button("返回主菜单", self.main_menu)
+                return
+            
+            # 创建表列表
+            self.create_label("请选择要查看的操作记录", 10, pady=5)
+            table_listbox = tk.Listbox(self.content_frame, width=60, height=10)
+            for table in table_names:
+                # 解析表名，提取时间和操作类型
+                table_listbox.insert(tk.END, table)
+            table_listbox.pack(pady=10)
+            
+            # 查看选中表的内容
+            def view_selected_table():
+                selection = table_listbox.curselection()
+                if selection:
+                    selected_table = table_names[selection[0]]
+                    self.view_table_content(selected_table)
+            
+            # 删除选中的表
+            def delete_selected_table():
+                selection = table_listbox.curselection()
+                if selection:
+                    selected_table = table_names[selection[0]]
+                    if messagebox.askyesno("确认删除", f"确定要删除表 {selected_table} 吗？此操作不可恢复！"):
+                        try:
+                            connection = pymysql.connect(
+                                host='localhost',
+                                user='root',
+                                password='mysql',
+                                database='port_log_db',
+                                charset='utf8mb4',
+                                cursorclass=pymysql.cursors.DictCursor
+                            )
+                            
+                            with connection.cursor() as cursor:
+                                sql = f"DROP TABLE IF EXISTS `{selected_table}`"
+                                cursor.execute(sql)
+                                connection.commit()
+                            
+                            connection.close()
+                            messagebox.showinfo("删除成功", f"表 {selected_table} 已成功删除")
+                            # 重新加载表列表
+                            self.view_logs()
+                        except Exception as e:
+                            messagebox.showerror("删除失败", f"删除表时出错: {str(e)}")
+            
+            self.create_button("查看选中的操作记录", view_selected_table)
+            self.create_button("删除选中的操作记录", delete_selected_table)
+            self.create_button("返回主菜单", self.main_menu)
+            
+        except Exception as e:
+            self.create_label(f"加载日志失败: {str(e)}", 10, color="red")
+            self.create_button("返回主菜单", self.main_menu)
+    
+    def view_table_content(self, table_name):
+        """查看指定表的内容"""
+        self.clear_widgets()
+        self.create_label(f"操作记录: {table_name}", 12)
+        
+        try:
+            import pymysql
+            
+            # 连接MySQL数据库
+            connection = pymysql.connect(
+                host='localhost',
+                user='root',
+                password='mysql',
+                database='port_log_db',
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # 查询表内容
+            with connection.cursor() as cursor:
+                sql = f"SELECT id, time, type, info FROM `{table_name}` ORDER BY time ASC"
+                cursor.execute(sql)
+                logs = cursor.fetchall()
+            
+            connection.close()
+            
+            # 创建日志列表
+            listbox = tk.Listbox(self.content_frame, width=80, height=12)
+            for log in logs:
+                # 格式化日志显示
+                timestamp = log['time'].strftime('%Y-%m-%d %H:%M:%S')
+                item = f"[{timestamp}] [{log['type']}] {log['info']}"
+                listbox.insert(tk.END, item)
+            listbox.pack(pady=10)
+            
+            def read_log():
+                selection = listbox.curselection()
+                if selection:
+                    log = logs[selection[0]]
+                    # 格式化日志详情
+                    timestamp = log['time'].strftime('%Y-%m-%d %H:%M:%S')
+                    content = f"时间: {timestamp}\n"
+                    content += f"类型: {log['type']}\n"
+                    content += f"信息: {log['info']}\n"
+                    
+                    log_win = tk.Toplevel(self.root)
+                    log_win.title("日志详情")
+                    log_win.geometry("800x300")
+                    t = tk.Text(log_win)
+                    t.insert(tk.END, content)
+                    t.pack(fill=tk.BOTH, expand=True)
+            
+            self.create_button("阅读选中的日志", read_log)
+            self.create_button("返回日志列表", self.view_logs)
+            self.create_button("返回主菜单", self.main_menu)
+            
+        except Exception as e:
+            self.create_label(f"加载日志失败: {str(e)}", 10, color="red")
+            self.create_button("返回日志列表", self.view_logs)
+            self.create_button("返回主菜单", self.main_menu)
 
     def close_log_and_return(self):
         """通用资源回收与状态重置"""
