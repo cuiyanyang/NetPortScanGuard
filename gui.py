@@ -190,34 +190,38 @@ class NetPortScanGuardGUI:
         progressbar.pack(pady=15)
 
         def run_scan():
-            ports = list(range(20, 1025)) # 扫描范围：常用端口
-            open_results = []
             self.scanning = True
-
-            for i, port in enumerate(ports, 1):
-                if not self.scanning: break
-                # 通过 after 提交 UI 任务，避免非主线程直接操作 UI 组件
+            open_results = []
+            
+            # 定义进度回调函数
+            def progress_callback(current, total):
+                # 计算当前扫描的端口
+                ports = list(range(20, 1025))
+                port = ports[current-1] if current <= total else 1024
+                # 更新界面
                 self.root.after(0, lambda p=port: self.status_label.config(text=f"正在分析端口：{p}"))
-                
-                m = mode.get()
-                res = False
-                # 策略路由：根据选择调用底层不同的 Scapy 探测函数
-                if m=="1": res=self.scanner.tcp_connect_scan(target_ip, port)
-                elif m=="2": res=self.scanner.tcp_syn_scan(target_ip, port)
-                elif m=="3": res=self.scanner.tcp_synack_scan(target_ip, port)
-                elif m=="4": res=self.scanner.tcp_fin_scan(target_ip, port)
-                elif m=="5": res=self.scanner.udp_scan(target_ip, port)
-                elif m=="6": res=self.scanner.null_scan(target_ip, port)
-                elif m=="7": res=self.scanner.xmas_scan(target_ip, port)
-
-                if res:
-                    service = self.scanner.get_service_name(target_ip, port)
-                    open_results.append((port, service))
-                    self.logger.write_open_port(target_ip, port)
-
-                self.root.after(0, lambda v=i*100/len(ports): progress.set(v))
-
+                self.root.after(0, lambda v=current*100/total: progress.set(v))
+                # 检查是否需要停止扫描
+                if not self.scanning:
+                    raise Exception("扫描已取消")
+            
+            try:
+                # 调用统一的扫描方法
+                open_results = self.scanner.scan_ports(
+                    target_ip, 
+                    mode.get(), 
+                    progress_callback=progress_callback
+                )
+            except Exception:
+                # 扫描被取消
+                pass
+            
             self.scanning = False
+            
+            # 记录开放端口
+            for port, service in open_results:
+                self.logger.write_open_port(target_ip, port)
+            
             result_str = "\n".join([f"{p}: {s}" for p, s in open_results]) if open_results else "未发现开放端口"
             messagebox.showinfo("扫描完成", f"结果如下：\n{result_str}")
             self.root.after(0, lambda: self.status_label.config(text="扫描完成"))
@@ -256,160 +260,88 @@ class NetPortScanGuardGUI:
         self.clear_widgets()
         self.create_label("所有安全日志", 12)
         
-        # 从MySQL数据库读取所有表
-        try:
-            import pymysql
-            
-            # 连接MySQL数据库
-            connection = pymysql.connect(
-                host='localhost',
-                user='root',
-                password='mysql',
-                database='port_log_db',
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-            
-            # 获取所有扫描和检测相关的表
-            with connection.cursor() as cursor:
-                # 分别查询两种类型的表并合并结果
-                cursor.execute("SHOW TABLES LIKE '%-scan'")
-                scan_tables = cursor.fetchall()
-                cursor.execute("SHOW TABLES LIKE '%-detect'")
-                detect_tables = cursor.fetchall()
-                tables = scan_tables + detect_tables
-            
-            # 提取表名并按时间倒序排序
-            table_names = []
-            for table in tables:
-                # 不同MySQL版本返回格式可能不同
-                if 'Tables_in_port_log_db' in table:
-                    table_names.append(table['Tables_in_port_log_db'])
-                else:
-                    for key, value in table.items():
-                        table_names.append(value)
-            
-            # 按表名排序（时间戳顺序）
-            table_names.sort(reverse=True)
-            
-            connection.close()
-            
-            if not table_names:
-                self.create_label("暂无日志记录", 12, color="red")
-                self.create_button("返回主菜单", self.main_menu)
-                return
-            
-            # 创建表列表
-            self.create_label("请选择要查看的操作记录", 10, pady=5)
-            table_listbox = tk.Listbox(self.content_frame, width=60, height=10)
-            for table in table_names:
-                # 解析表名，提取时间和操作类型
-                table_listbox.insert(tk.END, table)
-            table_listbox.pack(pady=10)
-            
-            # 查看选中表的内容
-            def view_selected_table():
-                selection = table_listbox.curselection()
-                if selection:
-                    selected_table = table_names[selection[0]]
-                    self.view_table_content(selected_table)
-            
-            # 删除选中的表
-            def delete_selected_table():
-                selection = table_listbox.curselection()
-                if selection:
-                    selected_table = table_names[selection[0]]
-                    if messagebox.askyesno("确认删除", f"确定要删除表 {selected_table} 吗？此操作不可恢复！"):
-                        try:
-                            connection = pymysql.connect(
-                                host='localhost',
-                                user='root',
-                                password='mysql',
-                                database='port_log_db',
-                                charset='utf8mb4',
-                                cursorclass=pymysql.cursors.DictCursor
-                            )
-                            
-                            with connection.cursor() as cursor:
-                                sql = f"DROP TABLE IF EXISTS `{selected_table}`"
-                                cursor.execute(sql)
-                                connection.commit()
-                            
-                            connection.close()
-                            messagebox.showinfo("删除成功", f"表 {selected_table} 已成功删除")
-                            # 重新加载表列表
-                            self.view_logs()
-                        except Exception as e:
-                            messagebox.showerror("删除失败", f"删除表时出错: {str(e)}")
-            
-            self.create_button("查看选中的操作记录", view_selected_table)
-            self.create_button("删除选中的操作记录", delete_selected_table)
+        # 使用Logger类的静态方法获取所有日志表
+        table_names = Logger.get_all_log_tables()
+        
+        if not table_names:
+            self.create_label("暂无日志记录", 12, color="red")
             self.create_button("返回主菜单", self.main_menu)
-            
-        except Exception as e:
-            self.create_label(f"加载日志失败: {str(e)}", 10, color="red")
-            self.create_button("返回主菜单", self.main_menu)
+            return
+        
+        # 创建表列表
+        self.create_label("请选择要查看的操作记录", 10, pady=5)
+        table_listbox = tk.Listbox(self.content_frame, width=60, height=10)
+        for table in table_names:
+            table_listbox.insert(tk.END, table)
+        table_listbox.pack(pady=10)
+        
+        # 查看选中表的内容
+        def view_selected_table():
+            selection = table_listbox.curselection()
+            if selection:
+                selected_table = table_names[selection[0]]
+                self.view_table_content(selected_table)
+        
+        # 删除选中的表
+        def delete_selected_table():
+            selection = table_listbox.curselection()
+            if selection:
+                selected_table = table_names[selection[0]]
+                if messagebox.askyesno("确认删除", f"确定要删除表 {selected_table} 吗？此操作不可恢复！"):
+                    if Logger.delete_log_table(selected_table):
+                        messagebox.showinfo("删除成功", f"表 {selected_table} 已成功删除")
+                        # 重新加载表列表
+                        self.view_logs()
+                    else:
+                        messagebox.showerror("删除失败", "删除表时出错")
+        
+        self.create_button("查看选中的操作记录", view_selected_table)
+        self.create_button("删除选中的操作记录", delete_selected_table)
+        self.create_button("返回主菜单", self.main_menu)
     
     def view_table_content(self, table_name):
         """查看指定表的内容"""
         self.clear_widgets()
         self.create_label(f"操作记录: {table_name}", 12)
         
-        try:
-            import pymysql
-            
-            # 连接MySQL数据库
-            connection = pymysql.connect(
-                host='localhost',
-                user='root',
-                password='mysql',
-                database='port_log_db',
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-            
-            # 查询表内容
-            with connection.cursor() as cursor:
-                sql = f"SELECT id, time, type, info FROM `{table_name}` ORDER BY time ASC"
-                cursor.execute(sql)
-                logs = cursor.fetchall()
-            
-            connection.close()
-            
-            # 创建日志列表
-            listbox = tk.Listbox(self.content_frame, width=80, height=12)
-            for log in logs:
-                # 格式化日志显示
+        # 使用Logger类的静态方法获取日志内容
+        logs = Logger.get_logs_from_table(table_name)
+        
+        if not logs:
+            self.create_label("加载日志失败或暂无记录", 10, color="red")
+            self.create_button("返回日志列表", self.view_logs)
+            self.create_button("返回主菜单", self.main_menu)
+            return
+        
+        # 创建日志列表
+        listbox = tk.Listbox(self.content_frame, width=80, height=12)
+        for log in logs:
+            # 格式化日志显示
+            timestamp = log['time'].strftime('%Y-%m-%d %H:%M:%S')
+            item = f"[{timestamp}] [{log['type']}] {log['info']}"
+            listbox.insert(tk.END, item)
+        listbox.pack(pady=10)
+        
+        def read_log():
+            selection = listbox.curselection()
+            if selection:
+                log = logs[selection[0]]
+                # 格式化日志详情
                 timestamp = log['time'].strftime('%Y-%m-%d %H:%M:%S')
-                item = f"[{timestamp}] [{log['type']}] {log['info']}"
-                listbox.insert(tk.END, item)
-            listbox.pack(pady=10)
-            
-            def read_log():
-                selection = listbox.curselection()
-                if selection:
-                    log = logs[selection[0]]
-                    # 格式化日志详情
-                    timestamp = log['time'].strftime('%Y-%m-%d %H:%M:%S')
-                    content = f"时间: {timestamp}\n"
-                    content += f"类型: {log['type']}\n"
-                    content += f"信息: {log['info']}\n"
-                    
-                    log_win = tk.Toplevel(self.root)
-                    log_win.title("日志详情")
-                    log_win.geometry("800x300")
-                    t = tk.Text(log_win)
-                    t.insert(tk.END, content)
-                    t.pack(fill=tk.BOTH, expand=True)
-            
-            self.create_button("阅读选中的日志", read_log)
-            self.create_button("返回日志列表", self.view_logs)
-            self.create_button("返回主菜单", self.main_menu)
-            
-        except Exception as e:
-            self.create_label(f"加载日志失败: {str(e)}", 10, color="red")
-            self.create_button("返回日志列表", self.view_logs)
-            self.create_button("返回主菜单", self.main_menu)
+                content = f"时间: {timestamp}\n"
+                content += f"类型: {log['type']}\n"
+                content += f"信息: {log['info']}\n"
+                
+                log_win = tk.Toplevel(self.root)
+                log_win.title("日志详情")
+                log_win.geometry("800x300")
+                t = tk.Text(log_win)
+                t.insert(tk.END, content)
+                t.pack(fill=tk.BOTH, expand=True)
+        
+        self.create_button("阅读选中的日志", read_log)
+        self.create_button("返回日志列表", self.view_logs)
+        self.create_button("返回主菜单", self.main_menu)
 
     def close_log_and_return(self):
         """通用资源回收与状态重置"""

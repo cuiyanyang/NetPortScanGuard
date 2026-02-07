@@ -145,3 +145,108 @@ class Logger:
             except Exception as e:
                 # 数据库写入失败时，打印错误信息
                 print(f"[ERROR] MySQL关闭失败: {str(e)}")
+
+    @staticmethod
+    def get_all_log_tables():
+        """获取所有日志表"""
+        try:
+            # 使用默认配置
+            config = DEFAULT_MYSQL_CONFIG
+            connection = pymysql.connect(
+                host=config['host'],
+                user=config['user'],
+                password=config['password'],
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # 切换到指定数据库
+            with connection.cursor() as cursor:
+                use_db_sql = f"USE {config['database']}"
+                cursor.execute(use_db_sql)
+            
+            with connection.cursor() as cursor:
+                # 分别查询两种类型的表并合并结果
+                cursor.execute("SHOW TABLES LIKE '%-scan'")
+                scan_tables = cursor.fetchall()
+                cursor.execute("SHOW TABLES LIKE '%-detect'")
+                detect_tables = cursor.fetchall()
+                tables = scan_tables + detect_tables
+            
+            # 提取表名
+            table_names = []
+            for table in tables:
+                if 'Tables_in_port_log_db' in table:
+                    table_names.append(table['Tables_in_port_log_db'])
+                else:
+                    for key, value in table.items():
+                        table_names.append(value)
+            
+            # 按表名排序（时间戳顺序）
+            table_names.sort(reverse=True)
+            
+            connection.close()
+            return table_names
+        except Exception as e:
+            print(f"[ERROR] 获取日志表失败: {str(e)}")
+            return []
+
+    @staticmethod
+    def get_logs_from_table(table_name):
+        """获取指定表的日志内容"""
+        try:
+            # 使用默认配置
+            config = DEFAULT_MYSQL_CONFIG
+            connection = pymysql.connect(
+                host=config['host'],
+                user=config['user'],
+                password=config['password'],
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # 切换到指定数据库
+            with connection.cursor() as cursor:
+                use_db_sql = f"USE {config['database']}"
+                cursor.execute(use_db_sql)
+            
+            with connection.cursor() as cursor:
+                sql = f"SELECT id, time, type, info FROM `{table_name}` ORDER BY time ASC"
+                cursor.execute(sql)
+                logs = cursor.fetchall()
+            
+            connection.close()
+            return logs
+        except Exception as e:
+            print(f"[ERROR] 获取日志内容失败: {str(e)}")
+            return []
+
+    @staticmethod
+    def delete_log_table(table_name):
+        """删除指定的日志表"""
+        try:
+            # 使用默认配置
+            config = DEFAULT_MYSQL_CONFIG
+            connection = pymysql.connect(
+                host=config['host'],
+                user=config['user'],
+                password=config['password'],
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            
+            # 切换到指定数据库
+            with connection.cursor() as cursor:
+                use_db_sql = f"USE {config['database']}"
+                cursor.execute(use_db_sql)
+            
+            with connection.cursor() as cursor:
+                sql = f"DROP TABLE IF EXISTS `{table_name}`"
+                cursor.execute(sql)
+                connection.commit()
+            
+            connection.close()
+            return True
+        except Exception as e:
+            print(f"[ERROR] 删除日志表失败: {str(e)}")
+            return False

@@ -147,3 +147,50 @@ class Scanner:
             res = sr1(IP(dst=ip)/TCP(dport=port, flags="FUP"), timeout=1, verbose=0)
             return res is None
         except: return False
+
+    def scan_ports(self, ip, scan_mode, ports=None, progress_callback=None):
+        """
+        统一的端口扫描方法
+        
+        Args:
+            ip: 目标 IP 地址
+            scan_mode: 扫描模式，1-7 对应不同的扫描技术
+            ports: 要扫描的端口列表，默认扫描常用端口
+            progress_callback: 进度回调函数
+            
+        Returns:
+            开放端口列表，格式为 [(port, service), ...]
+        """
+        if ports is None:
+            ports = list(range(20, 1025))  # 默认扫描常用端口
+        
+        open_results = []
+        total = len(ports)
+        
+        for i, port in enumerate(ports, 1):
+            # 调用进度回调
+            if progress_callback:
+                progress_callback(i, total)
+            
+            # 根据扫描模式选择不同的扫描方法
+            res = False
+            if scan_mode == "1":
+                res = self.tcp_connect_scan(ip, port)
+            elif scan_mode == "2":
+                res = self.tcp_syn_scan(ip, port)
+            elif scan_mode == "3":
+                res = self.tcp_synack_scan(ip, port)
+            elif scan_mode == "4":
+                res = self.tcp_fin_scan(ip, port)
+            elif scan_mode == "5":
+                res = self.udp_scan(ip, port)
+            elif scan_mode == "6":
+                res = self.null_scan(ip, port)
+            elif scan_mode == "7":
+                res = self.xmas_scan(ip, port)
+            
+            if res:
+                service = self.get_service_name(ip, port)
+                open_results.append((port, service))
+        
+        return open_results
