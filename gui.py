@@ -62,7 +62,7 @@ class NetPortScanGuardGUI:
     # --- 1. 入口主菜单 ---
     def main_menu(self):
         self.clear_widgets()
-        self.create_label("=== NetPortScanGuard 系统主界面 ===", 16, pady=40)
+        self.create_label("=== 基于Python的网络端口扫描与检测工具 主界面 ===", 16, pady=40)
         self.create_button("端口扫描", self.scan_hosts)
         self.create_button("扫描检测", self.start_detection)
         self.create_button("查看日志", self.view_logs)

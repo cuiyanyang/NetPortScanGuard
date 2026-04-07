@@ -12,14 +12,7 @@ DEFAULT_MYSQL_CONFIG = {
 
 class Logger:
     def __init__(self, operation, mysql_config=None):
-        """
-        初始化日志记录器，仅连接MySQL数据库存储日志
-        
-        Args:
-            operation: 操作类型
-            mysql_config: MySQL连接配置字典，包含host, user, password, database等
-                        如果不提供，将使用默认配置
-        """
+
         self.operation = operation
         self.start_time = time.time()
         
